@@ -3,72 +3,17 @@ package main
 import (
 	"context"
 	"crypto/rsa"
-	"errors"
 	"fmt"
 	"github.com/golang-jwt/jwt"
-	"github.com/labstack/echo/v4/middleware"
 	"github.com/lestrrat-go/jwx/jwa"
 	"github.com/lestrrat-go/jwx/jwk"
 	"log"
-	"net/http"
 	"time"
-)
-import (
-	"github.com/labstack/echo/v4"
 )
 
 func main() {
-	genToken()
-
-	e := echo.New()
-	e.Use(middleware.Logger())
-	e.Use(middleware.Recover())
-	e.Use(middleware.CORS())
-	e.Use(middleware.JWTWithConfig(middleware.JWTConfig{
-		ParseTokenFunc: func(auth string, c echo.Context) (interface{}, error) {
-			keySet, err := jwk.Fetch(context.Background(), "https://raw.githubusercontent.com/sahan-thinusha/ks/main/jwks.json")
-			if err != nil {
-				fmt.Println(err.Error())
-			}
-			token, err := jwt.Parse(auth, func(token *jwt.Token) (interface{}, error) {
-				if token.Method.Alg() != jwa.RS256.String() {
-					return nil, fmt.Errorf("Unexpected signing method: %v", token.Header["alg"])
-				}
-				kid, ok := token.Header["kid"].(string)
-				if !ok {
-					return nil, fmt.Errorf("kid header not found")
-				}
-				keys, ok := keySet.LookupKeyID(kid)
-				if !ok {
-					return nil, fmt.Errorf("key %v not found", kid)
-				}
-				publickey := &rsa.PublicKey{}
-				fmt.Println(publickey)
-				err = keys.Raw(publickey)
-				if err != nil {
-					fmt.Println(err)
-					return nil, fmt.Errorf("could not parse pubkey")
-				}
-				return publickey, nil
-			})
-
-			if err != nil {
-				fmt.Println("validate ", err)
-				return nil, err
-			}
-			if !token.Valid {
-				return nil, errors.New("invalid token")
-			}
-			return token, nil
-		},
-	}))
-	e.GET("/", func(c echo.Context) error {
-		return c.String(http.StatusOK, "Hello, World!")
-	})
-	e.Logger.Fatal(e.Start(":8080"))
-
-}
-func validateJWT() {
+	t := genToken()
+	validateToken(t)
 
 }
 
@@ -107,4 +52,37 @@ func genToken() string {
 
 	fmt.Println("Token : ", tokenString)
 	return tokenString
+}
+
+func validateToken(auth string) {
+	keySet, err := jwk.Fetch(context.Background(), "https://raw.githubusercontent.com/sahan-thinusha/ks/main/jwks.json")
+	if err != nil {
+		fmt.Println(err.Error())
+	}
+	token, err := jwt.Parse(auth, func(token *jwt.Token) (interface{}, error) {
+		if token.Method.Alg() != jwa.RS256.String() {
+			return nil, fmt.Errorf("Unexpected signing method: %v", token.Header["alg"])
+		}
+		kid, ok := token.Header["kid"].(string)
+		if !ok {
+			return nil, fmt.Errorf("kid header not found")
+		}
+		keys, ok := keySet.LookupKeyID(kid)
+		if !ok {
+			return nil, fmt.Errorf("key %v not found", kid)
+		}
+		publickey := &rsa.PublicKey{}
+		fmt.Println(publickey)
+		err = keys.Raw(publickey)
+		if err != nil {
+			fmt.Println(err)
+			return nil, fmt.Errorf("could not parse pubkey")
+		}
+		return publickey, nil
+	})
+
+	if err != nil {
+		fmt.Println("Token Validate Err", err)
+	}
+	fmt.Println("IsValid Token", token.Valid)
 }
